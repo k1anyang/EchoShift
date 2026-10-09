@@ -21,6 +21,9 @@ ONEFILE = (os.environ.get("ECHOSHIFT_ONEFILE") or os.environ.get("AUDIOCONV_ONEF
 datas = [
     (str(ROOT / "vendor" / "ffmpeg"), "vendor/ffmpeg"),
     (str(ROOT / "vendor" / "keys"), "vendor/keys"),
+    # The window/taskbar icon is loaded at runtime, not only baked into the exe
+    # as a resource, so the icon file has to travel with the bundle.
+    (str(ROOT / "assets"), "assets"),
 ]
 
 # Shared libraries PyInstaller cannot resolve for a conda interpreter.

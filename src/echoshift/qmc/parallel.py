@@ -42,6 +42,7 @@ __all__ = [
     "plan_chunks",
     "decrypt_parallel",
     "pool_available",
+    "pool_unavailable_reason",
     "reset_pool_probe",
     "reset_shared_pool",
 ]
@@ -55,6 +56,7 @@ MAX_WORKERS = 8
 
 _pool_lock = threading.Lock()
 _pool_state: bool | None = None
+_pool_reason: str | None = None
 
 #: One process pool, shared by every container in a batch.
 #:
@@ -76,9 +78,10 @@ _shared_broken = False
 
 def reset_pool_probe() -> None:
     """Forget the cached answer (used by tests)."""
-    global _pool_state
+    global _pool_state, _pool_reason
     with _pool_lock:
         _pool_state = None
+        _pool_reason = None
 
 
 def reset_shared_pool() -> None:
@@ -126,20 +129,42 @@ def _mark_shared_pool_broken() -> None:
 
 def pool_available() -> bool:
     """Whether a process pool can be created here; the answer is cached."""
-    global _pool_state
+    global _pool_state, _pool_reason
     with _pool_lock:
         if _pool_state is None:
-            _pool_state = _probe_pool()
+            # ``_probe_pool`` must not take ``_pool_lock``: it is called with
+            # the lock already held, and a plain Lock is not reentrant -- doing
+            # so deadlocked the very first decryption for ever.
+            _pool_state, _pool_reason = _probe_pool()
         return _pool_state
 
 
-def _probe_pool() -> bool:
+def pool_unavailable_reason() -> str | None:
+    """Why the probe failed, once it has run.  ``None`` when it succeeded.
+
+    Without this the only symptom of an unusable pool is a vague "改用单进程"
+    warning, which hides the difference between an environment that forbids
+    ``multiprocessing`` and a probe that simply timed out under load.
+    """
+    with _pool_lock:
+        return _pool_reason
+
+
+def _probe_pool() -> tuple[bool, str | None]:
+    """Try to spawn one worker process.  Returns ``(usable, failure_reason)``.
+
+    Pure with respect to module state: the caller owns the caching and the lock.
+    """
     try:
+        # 30 s is generous for spawning one worker, but a machine under heavy
+        # load (or an image being made while a batch runs) can exceed it -- and
+        # then *every* decryption silently falls back to serial for the rest of
+        # the session, because the answer is cached.
         with ProcessPoolExecutor(max_workers=1) as pool:
             pool.submit(int).result(timeout=30)
-        return True
-    except Exception:  # noqa: BLE001 - any failure means "not usable here"
-        return False
+        return True, None
+    except Exception as exc:  # noqa: BLE001 - any failure means "not usable here"
+        return False, f"{type(exc).__name__}: {exc}"
 
 
 @dataclass(frozen=True)
@@ -270,7 +295,13 @@ def decrypt_parallel(
     if workers <= 1 or total < MIN_PARALLEL_BYTES:
         return False, None, None
     if not pool_available():
-        return False, "当前环境不允许创建子进程（进程池不可用）", None
+        detail = pool_unavailable_reason()
+        return (
+            False,
+            f"当前环境不允许创建子进程（进程池不可用：{detail}）" if detail
+            else "当前环境不允许创建子进程（进程池不可用）",
+            None,
+        )
 
     workers = min(workers, MAX_WORKERS, max(1, os.cpu_count() or 2))
     chunks = build_chunks(

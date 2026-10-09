@@ -32,6 +32,7 @@ from ..core.diagnostics import write_diagnostic
 from ..errors import EchoShiftError, ToolNotFoundError
 from ..core.ffmpeg import ProcessLimiter, Toolchain, find_toolchain, terminate_active_processes
 from ..core.naming import TEMPLATE_HELP, TEMPLATE_PRESETS
+from ..paths import resource_dir
 from ..core.pipeline import (
     JobResult,
     JobState,
@@ -2230,6 +2231,44 @@ class EchoShiftApp:
         self.root.destroy()
 
 
+def _window_icon() -> Path | None:
+    """The .ico for the window and taskbar, if one can be found.
+
+    The packaged exe carries the icon as a resource, but a source run does not:
+    without this the window and taskbar show Tk's default feather while the
+    header shows the real mark.  ``assets`` is bundled into the payload (see
+    ``packaging/EchoShift.spec``) and also lives beside the source tree.
+    """
+    for directory in resource_dir("assets"):
+        candidate = directory / "echoshift.ico"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _apply_window_icon(root: tk.Misc) -> None:
+    """Give the window the same mark the header and the exe use.
+
+    ``iconbitmap`` is the Windows path and picks the right size from the .ico's
+    multi-resolution image; ``iconphoto`` covers everything else.  Neither is
+    fatal if it fails -- an icon is not worth refusing to start over.
+    """
+    icon = _window_icon()
+    if icon is None:
+        return
+    try:
+        root.iconbitmap(default=str(icon))
+        return
+    except tk.TclError:
+        pass
+    try:
+        photo = tk.PhotoImage(file=str(icon.with_suffix(".png")))
+        root.iconphoto(True, photo)
+        setattr(root, "_icon_photo", photo)  # keep a reference alive
+    except (tk.TclError, OSError):
+        pass
+
+
 def _enable_dpi_awareness() -> None:
     """Opt into real DPI scaling before any window exists.
 
@@ -2257,6 +2296,7 @@ def main() -> int:
     """Entry point for ``echoshift-gui``."""
     _enable_dpi_awareness()
     root = tk.Tk()
+    _apply_window_icon(root)
     # Scaling is deliberately left to Tk: it derives it from the real DPI once
     # the process is DPI-aware.  Forcing a value made the UI the wrong size on
     # every display that was not 96 dpi.

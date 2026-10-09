@@ -220,15 +220,9 @@ QQ 音乐用两代加密方案，本项目在 `src/echoshift/qmc/` 下完整实�
 
 ### 解密正确性怎么保证的
 
-- 三个密码（QMC1 / Map / RC4）都按参考实现逐行移植，并跑参考实现自带的**测试向量**。
-- 尾部布局用**真实文件**核对过，不是只照文档实现：`.mflac` 的 V1 尾部装的是
-  ASCII base64 ekey 文本，不是原始密钥字节（见上一节）。测试夹具 `standard_v1text.mflac`
-  就是照真实下载的结构造的，包含 EncV2 外层。
-- 加密容器的端到端测试覆盖 **5 种封装**：QMC1、V1+原始密钥 ×2（Map/RC4）、QTag、
-  V1+文本 ekey（EncV2）。它们和原始 FLAC 用相同参数转换后 **MP3 逐字节相同**。
-- 解密完成后会**嗅探前 16 字节**：如果不是 `fLaC` / `OggS` / `ID3` 等已知音频签名，
-  就报「ekey 很可能不正确」并提示跑 `--diagnose`，而不是输出一个听着像噪声的 MP3。
-- ekey 的多种解读是**按文件实测挑选**的，不是按启发式猜的。
+- 解密后会**嗅探前 16 字节**：如果不是 `fLaC` / `OggS` / `ID3` 等已知音频签名，
+  就直接报「ekey 很可能不正确」并提示跑 `--diagnose`，而不是输出一个听着像噪声的 MP3。
+- ekey 的多种解读会**按文件实际试解**来挑选，而不是按启发式猜。
 
 ---
 
@@ -263,15 +257,16 @@ QQ 音乐用两代加密方案，本项目在 `src/echoshift/qmc/` 下完整实�
 
 ## 命令行用法
 
-命令行**没有独立的启动方式**，直接用解释器模块入口。`-X utf8` 是必需的：
-中文版 Windows 控制台默认 GBK，编码不出工具输出的 `✓` 与中文（漏掉它也不会崩，
-`echoshift.console` 会兜底重设流编码，但显式打开更可靠）。
+命令行是给开发者的（从源码 `pip install -e .` 或设置 `PYTHONPATH` 后使用），
+发布的 `EchoShift.exe` 只有图形界面。
 
 ```powershell
-$env:PYTHONPATH = "src"          # 或先 pip install -e .
 python -X utf8 -m echoshift --help
 python -X utf8 -m echoshift --list-presets
 ```
+
+> `-X utf8` 建议保留：中文版 Windows 控制台默认 GBK，不加也能用（程序会兜底切换编码），
+> 但显式打开更稳妥。
 
 常用示例：
 
@@ -311,33 +306,26 @@ python -X utf8 -m echoshift D:\Music -o D:\MP3 --json
 
 ## 已知限制
 
-- **界面不支持中途调整队列**：转换开始后添加/删除会被拒绝（按钮会变灰并说明原因），
-  想改队列请先停止或等这一批跑完。
+- **界面不支持中途调整队列**：转换开始后添加/删除会被拒绝（按钮会变灰并说明原因）。
 - **只输出 MP3**，不输出其他格式。
+- **只支持 Windows 64 位**。
 - **musicex 容器无法自动取密钥**，这是有意为之，见 [MFLAC / QMC 支持情况](#mflac--qmc-支持情况)。
-- 大文件解密受限于纯 Python 密码的速度：改进版 RC4 约 1.9 MB/s（40 MB 的 `.mflac` 约 21 秒），
-  所以同时转换很多大文件时速度取决于 CPU 核数；QMC1 与 Map 密码快得多，不在同一量级。
-- 若操作系统禁止创建子进程（部分受限环境），解密会退回单进程并记录一条日志，功能不受影响，只是慢一些。
+- 转换速度取决于 CPU 核数与源文件大小；`.mflac` 解密是纯 Python 实现的，
+  40 MB 左右的曲目在单进程下需要十几到二十秒，多个大文件同时转换时会更慢。
 - 转换期间界面保持可响应；但如果机器本身负载已经很重，界面仍会变慢。
-- 诊断日志位于 `%APPDATA%\EchoShift\logs\echoshift.log`，单份上限 512 KiB、保留 3 份备份；
-  落盘前会遮蔽 ekey 与绝对路径。
 
 ---
 
 ## 许可与合规
 
-本项目采用 **GNU General Public License v3.0**，全文见 [LICENSE](LICENSE)。
-
-内置的 ffmpeg 来自 [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) 的 `full` 构建
-（`--enable-gpl --enable-version3`），是 GPL 组件，所以本项目同样以 GPLv3 发布。
-若你的使用场景不能接受 GPL，把 `vendor/ffmpeg/` 换成 LGPL 构建即可，代码无需改动。
+本项目采用 **GNU General Public License v3.0**，全文见 [LICENSE](LICENSE)
+（内置的 ffmpeg 是 GPL 组件，因此本项目同样以 GPLv3 发布）。
 
 - 本项目用于**你自己合法持有**的音频文件的本地格式转换（例如把无损文件压成车载能放的 MP3）。
   请自行确认符合你所在地区的法律与相关服务条款。
 - 项目**不提供、不获取、不绕过任何内容授权**：不会向任何服务器索取密钥，
-  不读取 QQ 音乐客户端的登录凭据或进程内存，也不附带任何密钥
-  （`vendor/keys/qmc_keys.json` 是空壳，只有格式说明）。
-- 解密算法实现参考了以下公开实现，特此致谢：
+  不读取 QQ 音乐客户端的登录凭据，也不附带任何密钥。
+- 解密算法参考了以下公开实现，特此致谢：
   [ownlight6/qmc-decoder](https://github.com/ownlight6/qmc-decoder)、
   [jixunmoe/tc_tea_rust](https://github.com/jixunmoe/tc_tea_rust)
   与 [unlock-music](https://git.unlock-music.dev/um)。

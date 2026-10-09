@@ -9,6 +9,7 @@ Tk cannot open a display.
 from __future__ import annotations
 
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 
 import pytest
@@ -872,21 +873,31 @@ def test_close_does_not_join_worker_on_tk_thread(app_window, monkeypatch):
     assert app_window._cancel.is_set()
 
 
+#: How long the mocked slow operations below pretend to take.  The assertions
+#: are relative to this rather than to a fixed millisecond budget: window
+#: construction measures 70-130 ms here, so a 200 ms budget for "did not block"
+#: failed about one run in five as soon as the machine was busy.
+_SLOW_OPERATION = 1.5
+
+
 def test_slow_toolchain_probe_does_not_block_window_construction(tk_root, monkeypatch):
     import time
 
     import echoshift.gui.app as app_module
 
     def slow_probe(*_args, **_kwargs):
-        time.sleep(0.4)
+        time.sleep(_SLOW_OPERATION)
         raise app_module.ToolNotFoundError("模拟未找到")
 
     monkeypatch.setattr(app_module, "find_toolchain", slow_probe)
     window = tk.Toplevel(tk_root)
     started = time.perf_counter()
     app = app_module.EchoShiftApp(window)
+    elapsed = time.perf_counter() - started
 
-    assert time.perf_counter() - started < 0.2
+    # Well under the mocked probe, so this can only pass if construction never
+    # waited for it.
+    assert elapsed < _SLOW_OPERATION / 2, f"窗口构造被探测阻塞了 {elapsed:.2f}s"
     app._closing = True
     window.destroy()
 
@@ -896,15 +907,42 @@ def test_directory_scan_is_dispatched_off_the_tk_thread(app_window, monkeypatch)
     from pathlib import Path
 
     def slow_scan(*_args, **_kwargs):
-        time.sleep(0.4)
+        time.sleep(_SLOW_OPERATION)
         return []
 
     monkeypatch.setattr("echoshift.gui.app.collect_sources", slow_scan)
     started = time.perf_counter()
     app_window._schedule_add_paths([Path("large-library")])
+    elapsed = time.perf_counter() - started
 
-    assert time.perf_counter() - started < 0.1
+    assert elapsed < _SLOW_OPERATION / 2, f"扫描没有异步派发，阻塞了 {elapsed:.2f}s"
     assert app_window._active_scans == 1
+
+
+def test_the_window_icon_is_available_and_applies(tk_root):
+    """The window/taskbar icon must be the same mark as the header and the exe.
+
+    A source run has no icon resource of its own, so without this the window
+    showed Tk's default feather while the header showed the real mark; and the
+    packaged build needs ``assets`` in the payload for the same reason.
+    """
+    from echoshift.gui.app import _apply_window_icon, _window_icon
+
+    icon = _window_icon()
+    assert icon is not None, "找不到 assets/echoshift.ico"
+    assert icon.suffix == ".ico"
+
+    window = tk.Toplevel(tk_root)
+    _apply_window_icon(window)          # must not raise
+    assert window.winfo_exists()
+    window.destroy()
+
+
+def test_the_build_bundles_the_assets_directory():
+    """The spec has to ship assets/, or the frozen app loses its window icon."""
+    spec = Path(__file__).resolve().parents[1] / "packaging" / "EchoShift.spec"
+    text = spec.read_text(encoding="utf-8")
+    assert '"assets"' in text, "packaging/EchoShift.spec 没有把 assets 打进产物"
 
 
 def test_no_classic_scrollbar_appears_anywhere(app_window):
