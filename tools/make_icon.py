@@ -1,8 +1,9 @@
-"""Draw the application icon.
+"""Render the application icon files.
 
-Matches the mark in the window header: a rounded accent square with a white,
-geometric E whose middle stroke becomes a right-facing shift arrow.  Written
-as code so every Windows icon size comes from one reproducible source.
+The mark itself is defined in :mod:`echoshift.brandmark` and shared with the
+in-app header, so the window icon, the taskbar icon, the exe's resource and the
+header cannot drift apart.  This script only supplies the raster side: it draws
+the tile and the mark at 256x256 and lets Pillow produce every Windows size.
 
     python tools/make_icon.py [output.ico]
 """
@@ -15,6 +16,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from echoshift.brandmark import (  # noqa: E402
+    MARK_ARROW,
+    MARK_LINES,
+    MARK_RADIUS,
+    MARK_STROKE,
+)
 from echoshift.gui.theme import DARK  # noqa: E402
 
 SIZES = [
@@ -24,7 +31,6 @@ SIZES = [
 
 #: Drawn on a 256x256 canvas, then scaled down by Pillow.
 CANVAS = 256
-RADIUS = 56
 
 
 def _hex(colour: str) -> tuple[int, int, int]:
@@ -39,18 +45,24 @@ def draw() -> "object":
 
     # Rounded accent tile, matching the in-app header mark.
     draw.rounded_rectangle(
-        (0, 0, CANVAS - 1, CANVAS - 1), radius=RADIUS, fill=_hex(DARK.accent)
+        (0, 0, CANVAS - 1, CANVAS - 1),
+        radius=MARK_RADIUS * CANVAS,
+        fill=_hex(DARK.accent),
     )
 
     ink = _hex(DARK.accent_text)
-    stroke = 22
-    left, top, middle, bottom = 67, 66, 128, 190
-    # The open right edge keeps the E legible; the middle arm carries motion.
-    draw.rounded_rectangle((left, top, left + stroke, bottom), radius=8, fill=ink)
-    draw.rounded_rectangle((left, top, 158, top + stroke), radius=8, fill=ink)
-    draw.rounded_rectangle((left, bottom - stroke, 158, bottom), radius=8, fill=ink)
-    draw.rounded_rectangle((left, middle - stroke // 2, 174, middle + stroke // 2), radius=8, fill=ink)
-    draw.polygon([(160, 91), (216, middle), (160, 165)], fill=ink)
+    stroke = MARK_STROKE * CANVAS
+    radius = stroke / 2
+
+    # Stroked segments are drawn as capsules so they match the canvas renderer,
+    # which uses round caps via create_line.
+    for x1, y1, x2, y2 in MARK_LINES:
+        ax, ay, bx, by = (v * CANVAS for v in (x1, y1, x2, y2))
+        draw.line((ax, ay, bx, by), fill=ink, width=round(stroke))
+        for cx, cy in ((ax, ay), (bx, by)):
+            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), fill=ink)
+
+    draw.polygon([(x * CANVAS, y * CANVAS) for x, y in MARK_ARROW], fill=ink)
 
     return image
 

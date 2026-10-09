@@ -105,22 +105,30 @@ def _music(c: tk.Canvas, cx: float, cy: float, s: float, colour: str, w: float) 
 
 
 def _brand(c: tk.Canvas, cx: float, cy: float, s: float, colour: str, w: float) -> None:
-    """A geometric E whose middle stroke becomes a right-pointing shift arrow."""
-    h = s * 0.5
-    left = cx - h * 0.72
-    top = cy - h * 0.68
-    bottom = cy + h * 0.68
-    stroke = max(w, s * 0.12)
-    _line(c, [left, top, left, bottom], colour, stroke)
-    _line(c, [left, top, cx + h * 0.30, top], colour, stroke)
-    _line(c, [left, bottom, cx + h * 0.30, bottom], colour, stroke)
-    _line(c, [left, cy, cx + h * 0.42, cy], colour, stroke)
-    c.create_polygon(
-        cx + h * 0.22, cy - h * 0.34,
-        cx + h * 0.82, cy,
-        cx + h * 0.22, cy + h * 0.34,
-        fill=colour, outline=colour,
-    )
+    """The EchoShift mark: a geometric E whose middle arm becomes an arrow.
+
+    Coordinates come from :mod:`echoshift.brandmark` so this and the generated
+    ``.ico`` cannot drift apart; only the drawing primitives are local.
+    """
+    from ..brandmark import MARK_STROKE, mark_arrow, mark_strokes
+
+    left = cx - s / 2
+    top = cy - s / 2
+    stroke = max(w, s * MARK_STROKE)
+
+    for segment in mark_strokes():
+        _line(
+            c,
+            [left + segment.x1 * s, top + segment.y1 * s,
+             left + segment.x2 * s, top + segment.y2 * s],
+            colour,
+            stroke,
+        )
+
+    points: list[float] = []
+    for x, y in mark_arrow():
+        points += [left + x * s, top + y * s]
+    c.create_polygon(points, fill=colour, outline=colour)
 
 
 def _check(c: tk.Canvas, cx: float, cy: float, s: float, colour: str, w: float) -> None:
