@@ -286,7 +286,8 @@ def decrypt_parallel(
       It is handed back rather than raised because the caller owns the
       destination file and has to remove it; returning it also stops the caller
       from falling back to a serial pass that would decrypt the whole file only
-      to fail the same check.
+      to fail the same check.  Chunks already dispatched are still awaited
+      before this returns, so nothing is writing to the destination afterwards.
 
     The process pool is shared across every container in the process, so the
     number of decrypt processes is capped by the pool size rather than growing
@@ -321,6 +322,15 @@ def decrypt_parallel(
             handle.truncate(total)
 
         completed = 0
+        bad_key: EchoShiftError | None = None
+        failure: tuple[str, int] | None = None
+        cancelled = False
+
+        # One loop, one exit.  Returning early while chunks are still running
+        # leaves workers writing into the destination after the caller has been
+        # told to clean it up -- which is how a rejected key left a partial file
+        # behind that reappeared after deletion.
+        #
         # Hold the lock for the whole submission+collection window: concurrent
         # decryptions then queue up behind each other instead of interleaving
         # twice the number of processes the budget allows.
@@ -328,18 +338,36 @@ def decrypt_parallel(
             pool = _acquire_shared_pool(workers)
             for offset, head, error in pool.map(run_chunk, chunks):
                 if error:
-                    return False, f"并行解密失败（offset {offset}）：{error}", None
+                    failure = (error, offset)
+                    continue
                 if head is not None and head_probe is not None:
-                    # Chunk 0 arrives first, so a bad key aborts immediately.
-                    # Let the exception through rather than folding it into the
-                    # "fall back to serial" reason: a wrong key is a real error,
-                    # and the caller has to see it to clean up and report it.
-                    head_probe(head)
+                    # Chunk 0 arrives first, so a bad key is known immediately;
+                    # keep draining so nothing is still writing when we return.
+                    if bad_key is None:
+                        try:
+                            head_probe(head)
+                        except EchoShiftError as exc:
+                            bad_key = exc
+                    # A chunk that failed the probe is not progress towards a
+                    # usable output; one that passed still is, so fall through.
+                    if bad_key is not None:
+                        continue
                 completed += 1
                 if on_progress is not None:
                     on_progress(completed / len(chunks))
                 if should_stop is not None and should_stop():
-                    return False, "已取消", None
+                    cancelled = True
+
+        if bad_key is not None:
+            # The caller owns the destination and removes it; reporting a
+            # fallback reason instead made it decrypt the whole file again only
+            # to fail the same check.
+            return False, None, bad_key
+        if failure is not None:
+            error, offset = failure
+            return False, f"并行解密失败（offset {offset}）：{error}", None
+        if cancelled:
+            return False, "已取消", None
         return True, None, None
     except EchoShiftError as exc:
         return False, None, exc

@@ -1172,22 +1172,31 @@ class EchoShiftApp:
         Letting Tk wrap it changed the label's height when the text straddled
         the wrap point, which moved every card below it -- so the label is
         single-line and shortened instead, with the full text in the tooltip.
+
+        Runs from a ``<Configure>`` binding, which Tk can still deliver while a
+        window is being torn down, so a vanished widget must not raise: the
+        label is advisory and a TclError here would surface as a random failure
+        in whatever ran next.
         """
         text = getattr(self, "_plan_text", "")
-        if not text:
-            self.plan_label.configure(text="")
-            return
-        prefix = "当前："
-        font = tkfont.Font(font=self.fonts.small)
-        width = self.plan_label.winfo_width()
-        if width <= 1:
-            # Not laid out yet; the <Configure> binding will call us again.
-            width = SETTINGS_COLUMN_WIDTH - 3 * GAP_MD
-        budget = max(font.measure(prefix), width - 4)
-        self.plan_label.configure(
-            text=prefix + ellipsize(text, max(20, budget - font.measure(prefix)),
-                                    font, cache=self._text_widths)
-        )
+        try:
+            if not text:
+                self.plan_label.configure(text="")
+                return
+            prefix = "当前："
+            font = tkfont.Font(font=self.fonts.small)
+            width = self.plan_label.winfo_width()
+            if width <= 1:
+                # Not laid out yet; the <Configure> binding calls us again.
+                width = SETTINGS_COLUMN_WIDTH - 3 * GAP_MD
+            budget = max(font.measure(prefix), width - 4)
+            self.plan_label.configure(
+                text=prefix + ellipsize(text, max(20, budget - font.measure(prefix)),
+                                        font, cache=self._text_widths)
+            )
+        except tk.TclError:
+            # The label (or the whole window) is already gone.
+            pass
 
     def _current_mode(self) -> BitrateMode:
         return _MODE_BY_LABEL.get(self.mode_var.get(), BitrateMode.VBR)
