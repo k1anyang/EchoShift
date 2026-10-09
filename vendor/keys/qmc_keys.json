@@ -1,0 +1,18 @@
+{
+  "_readme": [
+    "QMC2 ekey database.",
+    "QMC1 (.qmcflac/.qmc0/.qmc3/.qmcogg) needs no key.",
+    "MFLAC files with a QTag or V1 footer carry their key inline.",
+    "Only modern 'musicex' containers (QQ Music >= 19.57) need an entry here.",
+    "",
+    "Accepted shapes:",
+    "  { \"<mid>\": \"<ekey>\", \"<song_id>\": \"<ekey>\", \"<filename>\": \"<ekey>\" }",
+    "  { \"keys\": { ... } }",
+    "  [ { \"mid\": \"...\", \"song_id\": \"...\", \"filename\": \"...\", \"ekey\": \"...\" } ]",
+    "",
+    "This file ships empty on purpose: no key material is distributed with",
+    "the application. Populate it yourself, or drop a sidecar <song>.mflac.ekey",
+    "next to the audio, or paste an ekey in the UI."
+  ],
+  "keys": {}
+}

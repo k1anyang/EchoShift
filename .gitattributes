@@ -1,0 +1,26 @@
+# Line-ending policy.
+#
+# `tests/test_launchers.py` regenerates the .cmd launchers and asserts they are
+# byte-identical to the committed ones.  With core.autocrlf=true a clone would
+# rewrite their line endings and that test would fail on the very first run, so
+# every checkout has to reproduce exactly the bytes that were committed.
+* -text
+
+# These are text; keep them LF everywhere so generated == committed.
+*.py    text eol=lf
+*.pyw   text eol=lf
+*.cmd   text eol=lf
+*.ps1   text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+*.json  text eol=lf
+*.txt   text eol=lf
+
+# Never let Git touch these.
+vendor/ffmpeg/* binary
+assets/*        binary
+*.png           binary
+*.ico           binary
+*.flac          binary
+*.mflac         binary
+*.qmcflac       binary
