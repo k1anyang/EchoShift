@@ -27,14 +27,15 @@ Windows 桌面音频转换工具：把 ffmpeg 能读的**任何音频/视频**�
 
 ## 使用方式（只想用，不想改代码）
 
-1. 打开 [Releases](https://github.com/k1anyang/EchoShift/releases)，下载最新的
+1. 打开 [Releases](https://github.com/k1anyang/EchoShift/releases/latest)，下载
    `EchoShift-<版本>-win64.zip`。
-2. 解压到**任意可写目录**（不要只解压 exe，它依赖同目录的 `_internal`）。
-3. 双击 `EchoShift.exe`。免安装、免管理员权限，整份文件夹拷到别的 Windows 机器也能直接跑。
+2. 解压到**任意可写目录**（整个文件夹一起，不要只把 `EchoShift.exe` 拖出来）。
+3. 双击 `EchoShift.exe`。免安装、免管理员权限；整份文件夹拷到别的 Windows 机器也能直接跑。
 
-首次使用建议先拖一两个文件试一次，确认输出目录和参数符合预期再整目录批量转换。
+首次使用建议先拖一两个文件试一次，确认输出目录和参数符合预期，再整目录批量转换。
 
-> 如果 Release 还没挂打包产物，用下面的「直接跑源码」或「自行打包」。
+> Release 里没有打包产物时，可以自己打包（见[发布一个版本](#发布一个版本)），
+> 或者直接跑源码（下一节）。
 
 ---
 
@@ -49,6 +50,7 @@ Windows 桌面音频转换工具：把 ffmpeg 能读的**任何音频/视频**�
 - [命令行用法](#命令行用法)
 - [项目结构](#项目结构)
 - [开发、测试与打包](#开发测试与打包)
+- [发布一个版本](#发布一个版本)
 - [已知限制](#已知限制)
 - [许可与合规](#许可与合规)
 
@@ -56,66 +58,58 @@ Windows 桌面音频转换工具：把 ffmpeg 能读的**任何音频/视频**�
 
 ## 快速开始
 
+EchoShift 只有**一个入口：`EchoShift.exe`**。从 Release 下载解压后双击即可，
+不需要 Python、不需要 ffmpeg、不需要任何运行库。
+
+其余内容（跑源码、命令行、打包）都只面向想改代码的人。
+
 ### 直接跑源码（需要 Python 3.10+）
 
-克隆后**先补上 ffmpeg**——仓库不提交那 50 MB 二进制：
+仓库已包含 `vendor/ffmpeg`，克隆下来就能跑：
 
 ```powershell
 git clone https://github.com/k1anyang/EchoShift.git
 cd EchoShift
-powershell -ExecutionPolicy Bypass -File tools\vendor_ffmpeg.ps1
+.\launch_gui.pyw                   # 图形界面（无控制台窗口）
 ```
 
-然后任选一种方式启动：
-
-```powershell
-.\EchoShift.cmd                    # 图形界面
-.\EchoShift-CLI.cmd --help         # 命令行
-```
-
-或者不借助任何启动器：
+或者不借助任何脚本：
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m echoshift.gui.app
+pythonw -m echoshift.gui.app       # 或者 python -m echoshift.gui.app
 ```
 
-> `vendor_ffmpeg.ps1` 默认从 BtbN 的 `gpl-shared` 构建下载并校验 `libmp3lame`，
-> 也可以 `-SourceDir "C:\path\to\ffmpeg\bin"` 从本机已有的 ffmpeg 安装目录复制。
-> 没有它，界面仍会启动，但会提示「ffmpeg 不可用」。
+> 换成自备的 ffmpeg 时，跑 `tools\vendor_ffmpeg.ps1`：
+> 默认从 BtbN 的 `gpl-shared` 构建下载并校验 `libmp3lame`，
+> 也可以 `-SourceDir "C:\path\to\ffmpeg\bin"` 从本机已有安装目录复制。
+> 没有 ffmpeg 时界面仍会启动，但会提示「ffmpeg 不可用」。
 
-想要**双击即用、没有控制台黑框**，可以生成一个指向 `pythonw.exe` 的快捷方式：
+`launch_gui.pyw` 自己把 `src` 加进 `sys.path`，所以它不依赖任何环境变量。
+也可以用它生成一个真正的 Windows 快捷方式（放桌面或开始菜单）：
 
 ```powershell
 .\tools\make_shortcut.ps1                              # 生成在项目根目录
 .\tools\make_shortcut.ps1 -Destination "$env:USERPROFILE\Desktop"
 ```
 
-它绕开 `cmd.exe`（实测比 `.cmd` 快约 270ms，1080ms 出窗口）。
-`launch_gui.pyw` 自己把 `src` 加进 `sys.path`，所以快捷方式不依赖任何环境变量。
-注意快捷方式记录的是**生成时**的绝对路径，仓库不含它，挪动文件夹后重新生成即可。
+它记录的是**生成时**的绝对路径，仓库不含它，挪动文件夹后重新生成即可。
 
 > 应用图标由 `tools/make_icon.py` 生成（用界面同一套配色画出来，不是外部素材），
 > 改成别的配色后重跑一次即可。
->
-> 两个 `.cmd` 启动器也是生成产物，内容丢了或改了配色/路径后可以直接重建：
-> `tools\make_launchers.ps1`（有测试保证它与仓库里的版本逐字节一致）。
 
-### 推荐：便携 EXE
+### 打包成便携 EXE
 
 ```powershell
-.\build.ps1                 # 先跑测试，再生成 dist\EchoShift\（仅 GUI）
+.\build.ps1                 # 先跑测试，再生成 dist\EchoShift\EchoShift.exe
 .\build.ps1 -OneFile        # 改成自解压单文件（启动慢几秒）
-.\build.ps1 -All            # 开发用途：同时生成 GUI 与 CLI
+.\build.ps1 -SkipTests      # 跳过测试
 ```
 
-打包需要 `pip install pyinstaller`，并且需要先有 `vendor/ffmpeg`
-（详见 [开发、测试与打包](#开发测试与打包)）。
+打包需要 `pip install pyinstaller`，并且需要先有 `vendor/ffmpeg`。
 默认产出**文件夹**布局：内置 ffmpeg 的 DLL 有约 50 MB，单文件版每次启动都要把它们解压一遍。
-推荐直接双击 `dist\EchoShift\EchoShift.exe`。产物已内含 ffmpeg，整份 `EchoShift` 文件夹
-拷到别的 Windows 机器即可运行，不需要装 Python 或 ffmpeg。
-
-发布时把 `dist\EchoShift\` 整个压成 zip 挂到 GitHub Releases 即可，用户解压双击就能用。
+产物已内含 ffmpeg 与 Python 运行时，整份 `EchoShift` 文件夹拷到别的 Windows 机器即可运行。
+怎么把它发出去见[发布一个版本](#发布一个版本)。
 
 ---
 
@@ -248,7 +242,7 @@ QQ 音乐用两代加密方案，本项目在 `src/echoshift/qmc/` 下完整实�
 
 ### 装了 19.51 还是解不开？
 
-先跑 `EchoShift-CLI.cmd 文件.mflac --diagnose`，看「结论」那一行：
+先跑 `python -X utf8 -m echoshift 文件.mflac --diagnose`，看「结论」那一行：
 
 1. **尾部类型 = `musicex`，或尾部标记里什么都没有**
    → 这个文件里根本没有 ekey。
@@ -305,34 +299,36 @@ QQ 音乐用两代加密方案，本项目在 `src/echoshift/qmc/` 下完整实�
 
 ## 命令行用法
 
-```powershell
-.\EchoShift-CLI.cmd --help
-.\EchoShift-CLI.cmd --list-presets
-```
+命令行**没有独立的启动方式**，直接用解释器模块入口。`-X utf8` 是必需的：
+中文版 Windows 控制台默认 GBK，编码不出工具输出的 `✓` 与中文（漏掉它也不会崩，
+`echoshift.console` 会兜底重设流编码，但显式打开更可靠）。
 
-（也可以 `python -m echoshift ...`。注意启动器不能叫 `echoshift.cmd`——Windows 不区分大小写，
-会和 GUI 的 `EchoShift.cmd` 撞成同一个文件。）
+```powershell
+$env:PYTHONPATH = "src"          # 或先 pip install -e .
+python -X utf8 -m echoshift --help
+python -X utf8 -m echoshift --list-presets
+```
 
 常用示例：
 
 ```powershell
 # 单个文件，V0 最高质量
-python -m echoshift song.flac -o out --mode vbr -q 0
+python -X utf8 -m echoshift song.flac -o out --mode vbr -q 0
 
 # 加密文件 + 手填 ekey，固定 320 kbps
-python -m echoshift locked.mflac --ekey "<EKEY>" -o out --mode cbr -b 320
+python -X utf8 -m echoshift locked.mflac --ekey "<EKEY>" -o out --mode cbr -b 320
 
 # 整个目录递归，重采样到 44.1 kHz 并强制立体声，4 线程并行
-python -m echoshift D:\Music -o D:\MP3 -r --sample-rate 44100 --channels stereo -j 4
+python -X utf8 -m echoshift D:\Music -o D:\MP3 -r --sample-rate 44100 --channels stereo -j 4
 
 # 只看会得到什么，不实际转换
-python -m echoshift song.mflac --dry-run
+python -X utf8 -m echoshift song.mflac --dry-run
 
 # mflac 打不开时：打印文件头尾、尾部布局与密钥判定（不转换）
-.\EchoShift-CLI.cmd broken.mflac --diagnose
+python -X utf8 -m echoshift broken.mflac --diagnose
 
 # 机器可读的结果（含每项校验明细）
-python -m echoshift D:\Music -o D:\MP3 --json
+python -X utf8 -m echoshift D:\Music -o D:\MP3 --json
 ```
 
 退出码：`0` 全部成功，`1` 有失败项，`2` 参数错误，`3` ffmpeg 不可用，`4` 没找到输入文件。
@@ -387,6 +383,8 @@ src/echoshift/
     └── dnd.py             原生 WM_DROPFILES 拖拽（纯 ctypes）
 tools/                     测试样本生成、冒烟、基准、截图
 tests/                     pytest 套件
+packaging/EchoShift.spec   PyInstaller 打包定义（唯一发布目标）
+launch_gui.pyw             源码运行入口（等价于 EchoShift.exe）
 vendor/ffmpeg/             内置 ffmpeg 7.0.2 + ffprobe + 依赖 DLL
 vendor/keys/               空密钥库（格式见注释）
 ```
@@ -413,10 +411,7 @@ vendor/keys/               空密钥库（格式见注释）
 ```powershell
 pip install -e ".[dev]"
 
-# 先补 ffmpeg（仓库不提交二进制，缺了它依赖 ffmpeg 的测试会跳过）
-powershell -ExecutionPolicy Bypass -File tools\vendor_ffmpeg.ps1
-
-# 完整测试套件（会调用内置 ffmpeg 跑真实的转换）
+# 完整测试套件（会调用 vendor/ffmpeg 跑真实的转换）
 python -m pytest tests -q
 
 # 生成测试样本到 samples/
@@ -475,14 +470,110 @@ pip install pyinstaller
 .\build.ps1
 ```
 
-`build.ps1` 默认先跑测试，再用 `packaging/EchoShift.spec` 生成无控制台窗口的 GUI 一文件夹版，
-并把 `vendor/` 一并塞进去。`-All` 才会额外生成带控制台的 CLI；`-OneFile` 可改成
-自解压单文件。两个入口都调用了
-`multiprocessing.freeze_support()`——冻结后大文件的多进程解密要靠它。
+`build.ps1` 默认先跑测试，再用 `packaging/EchoShift.spec` 生成无控制台窗口的
+GUI 一文件夹版，并把 `vendor/` 一并塞进去。`-OneFile` 可改成自解压单文件。
+入口调用了 `multiprocessing.freeze_support()`——冻结后大文件的多进程解密要靠它。
 
-`ffmpeg` 不是提交进仓库的二进制，用 `tools/vendor_ffmpeg.ps1` 获取：
+`vendor/ffmpeg` 已随仓库提供；要换成自备的，用 `tools/vendor_ffmpeg.ps1`：
 默认从 BtbN 的 `gpl-shared` 构建下载并校验 `libmp3lame`，
 也可以 `-SourceDir` 从本机已有的 ffmpeg 安装目录复制。
+
+---
+
+## 发布一个版本
+
+给用户的东西**只有一个**：`EchoShift.exe` 及其文件夹。命令行前端不发布。
+
+### 1. 打包
+
+```powershell
+cd H:\Project\Audio_C
+.\build.ps1                      # 会先跑一遍测试，通过才继续
+```
+
+产物：`dist\EchoShift\`（约 122 MB，解压后 127 MB），结构是：
+
+```
+dist\EchoShift\
+├── EchoShift.exe          ← 唯一的入口，双击运行
+├── _internal\             ← Python 运行时 + 全部依赖（必须一起发布）
+│   ├── vendor\ffmpeg\     ← ffmpeg.exe / ffprobe.exe 与 20 个 DLL
+│   ├── vendor\keys\       ← 空密钥库（只有格式说明）
+│   ├── tcl86t.dll tk86t.dll   ← Tcl/Tk（少了 exe 会在启动时报 DLL load failed）
+│   └── base_library.zip …
+├── LICENSE                ← 必须保留
+└── 说明.txt               ← 可选，建议放一份
+```
+
+**`EchoShift.exe` 不能单独拷出来**：它依赖同级的 `_internal`，只发 exe 会报错。
+
+### 2. 组装 zip
+
+```powershell
+# 目录里先补两个对用户有用的文件
+Copy-Item LICENSE dist\EchoShift\LICENSE
+@"
+EchoShift — 音频转 MP3
+
+用法：解压到任意可写目录，双击 EchoShift.exe。
+      请不要只把 EchoShift.exe 单独拷出来，它需要同目录的 _internal。
+      首次使用建议先拿一两个文件试一次，确认参数与输出目录符合预期。
+
+本程序用于你自己合法持有的音频文件的本地格式转换，不提供、不获取、不绕过
+任何内容授权，也不附带任何密钥。请自行确认使用符合当地法律与服务条款。
+
+许可：GPLv3（见 LICENSE）。内置 ffmpeg 来自 gyan.dev 的 full 构建（GPL）。
+源码：https://github.com/k1anyang/EchoShift
+"@ | Set-Content -Path dist\EchoShift\说明.txt -Encoding UTF8
+
+# 打包（保留目录结构；zip 里不会多出一层 EchoShift\）
+Compress-Archive -Path dist\EchoShift\* -DestinationPath EchoShift-1.0.0-win64.zip -Force
+```
+
+自检一下 zip 再上传：
+
+```powershell
+(Get-Item EchoShift-1.0.0-win64.zip).Length / 1MB          # 实测约 50 MB
+Remove-Item .tmp\ziptest -Recurse -Force -ErrorAction SilentlyContinue
+Expand-Archive EchoShift-1.0.0-win64.zip .tmp\ziptest -Force
+Test-Path .tmp\ziptest\EchoShift.exe                        # 必须是 True
+Test-Path .tmp\ziptest\_internal\vendor\ffmpeg\ffmpeg.exe   # 必须是 True
+# 最有用的一步：直接运行解压出来的副本
+Start-Process .tmp\ziptest\EchoShift.exe
+```
+
+### 3. 挂到 GitHub Releases
+
+在浏览器里：
+
+1. 打开 https://github.com/k1anyang/EchoShift/releases/new
+2. **Choose a tag** 填 `v1.0.0`，点 "Create new tag on publish"
+3. **Release title** 填 `EchoShift 1.0.0`
+4. 描述里写清：解压后双击 `EchoShift.exe`、不要单独拷 exe、只支持 Windows 64 位、
+   GPLv3 与"仅限合法持有文件"的说明
+5. **Attach binaries** 把 `EchoShift-1.0.0-win64.zip` 拖进去
+6. **Publish release**
+
+或者用命令行（需要 [GitHub CLI](https://cli.github.com/)）：
+
+```powershell
+gh release create v1.0.0 EchoShift-1.0.0-win64.zip `
+  --title "EchoShift 1.0.0" `
+  --notes "解压后双击 EchoShift.exe。不要单独拷出 exe，它需要同目录的 _internal。"
+```
+
+### 4. 发布后核对
+
+```powershell
+# 用另一台机器（或另一个目录）真的下载并跑一次
+# 下载页：https://github.com/k1anyang/EchoShift/releases/latest
+```
+
+清单：解压 → 双击 → 窗口出现 → 拖入一个 `.mp3`/`.flac` 转一次 → 输出文件能播放。
+这样才算发布完成。
+
+> 想发新版本时改 `pyproject.toml` 与 `packaging/version_info.txt` 里的版本号，
+> 重新打包并用新的 tag（`v1.0.1`…）再走一遍。
 
 ---
 

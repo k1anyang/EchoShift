@@ -84,3 +84,28 @@ def test_qmc_layer_does_not_import_the_core_package():
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "[]", f"qmc pulled in {result.stdout.strip()}"
+
+
+@pytest.mark.parametrize("utf8_mode", [True, False])
+def test_the_documented_cli_invocation_prints_chinese(utf8_mode: bool):
+    """``python -X utf8 -m echoshift`` is the only documented command line.
+
+    A Chinese Windows console defaults to GBK, which cannot encode the tool's
+    own output.  ``-X utf8`` is what the README tells people to use; the second
+    case pins ``console.py`` as the safety net for anyone who forgets it -- both
+    must produce real text, and the safety net must never raise or mangle it.
+    """
+    cmd = [sys.executable]
+    if utf8_mode:
+        cmd.append("-X")
+        cmd.append("utf8")
+    cmd += ["-m", "echoshift", "--list-presets"]
+
+    # Force the legacy codec regardless of what this machine's console uses.
+    env = {**_ENV, "PYTHONIOENCODING": "gbk"}
+    result = subprocess.run(cmd, capture_output=True, timeout=120, env=env)
+
+    assert result.returncode == 0, result.stderr
+    text = result.stdout.decode("utf-8")
+    assert "内置预设" in text, text[:200]
+    assert "\ufffd" not in text, "输出被替换成了乱码，说明编码没有真正切换"

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Populate vendor/ffmpeg with an ffmpeg + ffprobe build that includes libmp3lame.
 

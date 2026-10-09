@@ -12,6 +12,7 @@ re-extracts all of them on every launch.
 """
 
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(SPECPATH).resolve().parent
@@ -21,6 +22,45 @@ datas = [
     (str(ROOT / "vendor" / "ffmpeg"), "vendor/ffmpeg"),
     (str(ROOT / "vendor" / "keys"), "vendor/keys"),
 ]
+
+# Shared libraries PyInstaller cannot resolve for a conda interpreter.
+#
+# It bundles the Tcl/Tk *data* directories but not the Tcl/Tk DLLs themselves,
+# and it cannot find the CPython extension dependencies either -- for each of
+# these it only logs "Library not found", and the resulting exe then dies at
+# startup with "DLL load failed while importing <module>".  On conda they all
+# live in the interpreter's Library\bin; for a python.org install the same
+# libraries sit in DLLs\ or next to the interpreter, so search all of them and
+# match case-insensitively (conda ships both zlib.dll and zlib1.dll).
+_WANTED = [
+    "tcl86t.dll",       # _tkinter
+    "tk86t.dll",        # _tkinter
+    "ffi.dll",          # _ctypes
+    "liblzma.dll",      # _lzma
+    "libbz2.dll",       # _bz2
+    "libexpat.dll",     # pyexpat
+    "libmpdec-4.dll",   # _decimal
+]
+_here = Path(sys.executable).resolve().parent
+_search_dirs = [
+    _here / "DLLs",              # python.org
+    _here / "Library" / "bin",   # conda / Anaconda
+    _here,
+]
+binaries = []
+for _name in _WANTED:
+    for _directory in _search_dirs:
+        if not _directory.is_dir():
+            continue
+        _match = next(
+            (p for p in _directory.iterdir() if p.name.lower() == _name.lower()),
+            None,
+        )
+        if _match is not None:
+            binaries.append((str(_match), "."))
+            break
+    else:
+        print(f"EchoShift.spec: warning: {_name} not found; the build will not start")
 
 # Nothing outside the standard library is imported at runtime; keep the bundle
 # lean by refusing the usual accidental pickups.
@@ -32,7 +72,7 @@ excludes = [
 a = Analysis(
     [str(ROOT / "packaging" / "launch_gui.py")],
     pathex=[str(ROOT / "src")],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=[],
     hookspath=[],

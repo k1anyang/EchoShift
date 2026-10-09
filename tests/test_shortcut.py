@@ -7,6 +7,7 @@ there is no environment variable to carry it.
 
 from __future__ import annotations
 
+import codecs
 import subprocess
 import sys
 from pathlib import Path
@@ -57,12 +58,38 @@ def test_the_icon_exists_and_has_several_sizes():
     assert {(16, 16), (32, 32), (48, 48), (256, 256)} <= sizes, sizes
 
 
-def test_the_shortcut_script_is_ascii_and_targets_pythonw():
+def test_the_shortcut_script_targets_pythonw():
     assert SCRIPT.is_file(), "缺少 tools/make_shortcut.ps1"
-    text = SCRIPT.read_text(encoding="ascii")
+    # Read as UTF-8 (and tolerate the BOM the script carries): Windows
+    # PowerShell 5.1 decodes a BOM-less .ps1 as ANSI, so every .ps1 in this repo
+    # that contains non-ASCII text has to keep its BOM or it will not parse.
+    text = SCRIPT.read_text(encoding="utf-8-sig")
     assert "pythonw.exe" in text
     assert "launch_gui.pyw" in text
     assert "WScript.Shell" in text
+
+
+def test_powershell_scripts_that_need_it_keep_a_utf8_bom():
+    """A .ps1 with non-ASCII text must start with a BOM.
+
+    Without it PowerShell 5.1 -- still ``powershell.exe`` on Windows 10/11 --
+    reads the file as ANSI and fails to *parse* it ("意外的标记"), which is how a
+    working build script turns into a syntax error on a Chinese system.
+    """
+    scripts = sorted((ROOT / "tools").glob("*.ps1")) + [ROOT / "build.ps1"]
+    checked = 0
+    for path in scripts:
+        if not path.is_file():
+            continue
+        raw = path.read_bytes()
+        if not any(byte > 127 for byte in raw):
+            continue  # pure ASCII parses under any encoding
+        checked += 1
+        assert raw.startswith(codecs.BOM_UTF8), (
+            f"{path.relative_to(ROOT)} 含非 ASCII 字符但没有 UTF-8 BOM，"
+            "PowerShell 5.1 会解析失败"
+        )
+    assert checked, "没有找到任何含非 ASCII 的 .ps1，这个测试等于没跑"
 
 
 def test_the_shortcut_generator_creates_a_working_link(tmp_path: Path):

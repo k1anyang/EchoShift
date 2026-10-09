@@ -1,20 +1,27 @@
-# Line-ending policy.
+# Text policy.
 #
-# `tests/test_launchers.py` regenerates the .cmd launchers and asserts they are
-# byte-identical to the committed ones.  With core.autocrlf=true a clone would
-# rewrite their line endings and that test would fail on the very first run, so
-# every checkout has to reproduce exactly the bytes that were committed.
+# Line endings are pinned so a checkout reproduces exactly what was committed,
+# regardless of the machine's core.autocrlf: a `core.autocrlf=true` clone would
+# otherwise rewrite line endings and make committed files differ from the ones
+# the tests and generators produce.
 * -text
 
 # These are text; keep them LF everywhere so generated == committed.
 *.py    text eol=lf
 *.pyw   text eol=lf
 *.cmd   text eol=lf
-*.ps1   text eol=lf
 *.md    text eol=lf
 *.toml  text eol=lf
 *.json  text eol=lf
 *.txt   text eol=lf
+
+# Windows PowerShell 5.1 -- still the default powershell.exe on Windows 10/11 --
+# decodes a BOM-less .ps1 as ANSI, so the Chinese strings in build.ps1 and
+# tools/vendor_ffmpeg.ps1 become mojibake and the file fails to *parse*.  The BOM
+# is committed as part of the blob rather than generated on checkout, so every
+# clone and every Git version behaves the same.  Python is unaffected (3.x
+# treats source as UTF-8), and PowerShell 7 accepts both forms.
+*.ps1   text eol=lf
 
 # Never let Git touch these.
 vendor/ffmpeg/* binary

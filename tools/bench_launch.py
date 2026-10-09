@@ -83,27 +83,22 @@ def main() -> int:
     imp, total = result
     print(f"{'python -m（控制台解释器）':<28}{imp:8.0f}ms{total:12.0f}ms")
 
-    windowed_total = total
     if Path(pythonw).is_file():
         result = measure([pythonw, "-c", BOOT])
         if result is not None:
-            imp, windowed_total = result
-            print(f"{'pythonw（无控制台窗口）':<28}{imp:8.0f}ms{windowed_total:12.0f}ms")
+            imp, total = result
+            print(f"{'pythonw（无控制台窗口）':<28}{imp:8.0f}ms{total:12.0f}ms")
 
     start = time.perf_counter()
     subprocess.run(["cmd", "/c", "echo x"], capture_output=True, env=ENV)
     cmd_overhead = (time.perf_counter() - start) * 1000
-    print(f"{'cmd.exe 本身的开销':<29}{'—':>10}{cmd_overhead:12.0f}ms")
-
-    if (ROOT / "EchoShift.cmd").is_file():
-        print()
-        print(f".cmd 启动器 ≈ cmd.exe 开销 + pythonw 启动 = 约 {cmd_overhead + windowed_total:.0f}ms")
+    print(f"{'cmd.exe 本身的开销（对照）':<26}{'—':>10}{cmd_overhead:12.0f}ms")
 
     print()
     print("对照：")
-    print("  PyInstaller onedir   启动与上面相当（少一次 cmd.exe 往返，省 ~50ms）")
-    print("  快捷方式直连 pythonw  同样省掉 cmd.exe 往返")
-    print("  PyInstaller onefile  每次启动都要把 50MB 内置 ffmpeg 解压到临时目录，")
+    print("  PyInstaller onedir   发布给用户的形态；启动与 pythonw 相当",
+          f"（快约 {cmd_overhead:.0f}ms，无需先起解释器）")
+    print("  PyInstaller onefile  每次启动都要把 50 MB 内置 ffmpeg 解压到临时目录，")
     print("                       这类应用通常要 2-4 秒，是本项目最不推荐的形态")
     return 0
 

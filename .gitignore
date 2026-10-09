@@ -6,6 +6,9 @@ __pycache__/
 build/
 dist/
 
+# Release archives assembled from dist/ (see README "发布一个版本").
+*.zip
+
 # --- test / scratch ---
 .pytest_cache/
 pytest-cache-files-*/

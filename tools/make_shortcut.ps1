@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Create a shortcut that launches the EchoShift GUI with no console window.
 

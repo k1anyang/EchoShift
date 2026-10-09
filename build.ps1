@@ -1,20 +1,17 @@
 ﻿<#
 .SYNOPSIS
-    Build the EchoShift executables with PyInstaller.
+    Build the EchoShift executable with PyInstaller.
 
 .DESCRIPTION
-    Produces a windowed GUI build (EchoShift) under dist\.  The vendored
-    ffmpeg is bundled, so the result runs
-    on a machine with no Python and no ffmpeg installed.
+    Produces the windowed GUI build ``dist\EchoShift\EchoShift.exe``.  The
+    vendored ffmpeg is bundled, so the result runs on a machine with no Python
+    and no ffmpeg installed.
 
     A folder layout is the default: the bundled ffmpeg DLLs are ~50 MB and a
     one-file build would re-extract all of them on every launch.
 
 .PARAMETER OneFile
-    Produce self-extracting single executables instead of folders.
-
-.PARAMETER All / CliOnly
-    Build both GUI and CLI targets, or only the CLI.  GUI-only is the default.
+    Produce a self-extracting single executable instead of a folder.
 
 .PARAMETER Python
     Python executable used for tests and PyInstaller.
@@ -29,9 +26,6 @@
 [CmdletBinding()]
 param(
     [switch]$OneFile,
-    [switch]$GuiOnly,
-    [switch]$CliOnly,
-    [switch]$All,
     [switch]$SkipTests,
     [string]$Python = "python"
 )
@@ -100,25 +94,28 @@ foreach ($path in @("build", "dist")) {
     if (Test-Path $path) { Remove-Item $path -Recurse -Force }
 }
 
-if ($All -and ($GuiOnly -or $CliOnly)) {
-    throw "-All 不能与 -GuiOnly 或 -CliOnly 同时使用。"
-}
-$specs = @()
-if ($All) {
-    $specs += "packaging\EchoShift.spec", "packaging\echoshift-cli.spec"
-}
-elseif ($CliOnly) {
-    $specs += "packaging\echoshift-cli.spec"
-}
-else {
-    $specs += "packaging\EchoShift.spec"
+Write-Host ""
+Write-Host "== 打包 ==" -ForegroundColor Cyan
+# PyInstaller writes its progress to stderr, which Windows PowerShell 5.1 turns
+# into a terminating NativeCommandError while $ErrorActionPreference is Stop.
+# Relax it for this one call and judge the result by the exit code instead.
+$previous = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+$pyiLog = & $PyInstallerCommand @PyInstallerArgs "packaging\EchoShift.spec" --noconfirm --distpath dist --workpath build 2>&1
+$buildExit = $LASTEXITCODE
+$ErrorActionPreference = $previous
+# PyInstaller logs a line per bundled module.  Show only what could mean
+# trouble, and keep the full log on disk for when it does fail.
+$pyiLog | Set-Content -Path "build\pyinstaller.log" -Encoding UTF8
+$pyiLog | Where-Object { $_ -match '^\d+ (WARNING|ERROR)|Traceback|ImportError' } |
+    ForEach-Object { Write-Host $_ }
+if ($buildExit -ne 0) {
+    Write-Host "完整日志：build\pyinstaller.log" -ForegroundColor Yellow
+    throw "打包失败：packaging\EchoShift.spec (exit $buildExit)"
 }
 
-foreach ($spec in $specs) {
-    Write-Host ""
-    Write-Host "== 打包 $spec ==" -ForegroundColor Cyan
-    & $PyInstallerCommand @PyInstallerArgs $spec --noconfirm --distpath dist --workpath build
-    if ($LASTEXITCODE -ne 0) { throw "打包失败：$spec" }
+if (-not (Test-Path "dist\EchoShift\EchoShift.exe")) {
+    throw "打包结束但没找到 dist\EchoShift\EchoShift.exe"
 }
 
 Write-Host ""
